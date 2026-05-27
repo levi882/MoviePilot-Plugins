@@ -18,21 +18,21 @@ from app.helper.cookiecloud import CookieCloudHelper
 
 from playwright.sync_api import sync_playwright
 
-class WeWorkIPPW(_PluginBase):
+class WeWorkIPPWLevi(_PluginBase):
     # 插件名称
-    plugin_name = "企微配置IPpw版"
+    plugin_name = "企微配置IPpw修复版"
     # 插件描述
     plugin_desc = "!!docker用户用这个版本!!定时获取最新动态公网IP，配置到企业微信应用的可信IP列表里。"
     # 插件图标
     plugin_icon = "https://github.com/suraxiuxiu/MoviePilot-Plugins/blob/main/icons/micon.png?raw=true"
     # 插件版本
-    plugin_version = "2.4.2"
+    plugin_version = "2.4.3"
     # 插件作者
-    plugin_author = "suraxiuxiu"
+    plugin_author = "levi882"
     # 作者主页
-    author_url = "https://github.com/suraxiuxiu/MoviePilot-Plugins"
+    author_url = "https://github.com/levi882/MoviePilot-Plugins"
     # 插件配置项ID前缀
-    plugin_config_prefix = "weworkippw_"
+    plugin_config_prefix = "weworkippwlevi_"
     # 加载顺序
     plugin_order = 20
     # 可使用的用户级别
@@ -189,7 +189,7 @@ class WeWorkIPPW(_PluginBase):
 
         if event:
             event_data = event.event_data
-            if not event_data or event_data.get("action") != "weworkippw":
+            if not event_data or event_data.get("action") != "weworkippwlevi":
                 return
             logger.info("收到命令，开始检测公网IP ...")
             self.post_message(channel=event.event_data.get("channel"),
@@ -534,7 +534,7 @@ class WeWorkIPPW(_PluginBase):
             self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "登录失败",text = "已开启自动登录，即将开始下一轮登录。",userid=self._qr_send_users)
             self.create_login_job()
         else:
-            self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "登录失败",text = "如需再次登录，请回复\n#登录企业微信",userid=self._qr_send_users)
+            self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "登录失败",text = "如需再次登录，请回复\n#登录企业微信修复版",userid=self._qr_send_users)
             
     def check_connect(self):
         try:
@@ -579,7 +579,7 @@ class WeWorkIPPW(_PluginBase):
             self._code = text[1:]
             logger.info(f"从MP应用收到验证码：{self._code}")
             return
-        if text == "#登录企业微信":
+        if text == "#登录企业微信修复版":
             if self._cookie_valid:
                 self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "缓存有效，无需登录",userid=self._qr_send_users)
                 return
@@ -593,7 +593,7 @@ class WeWorkIPPW(_PluginBase):
     
     def send_cookie_status(self):
         if not self._cookie_valid:
-            self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "企业微信Cookie失效",text = "回复下述指令唤起一次登录\n#登录企业微信",userid=self._qr_send_users)
+            self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "企业微信Cookie失效",text = "回复下述指令唤起一次登录\n#登录企业微信修复版",userid=self._qr_send_users)
 
     def get_state(self) -> bool:
         return self._enabled
@@ -605,12 +605,12 @@ class WeWorkIPPW(_PluginBase):
         :return: 命令关键字、事件、描述、附带数据
         """
         return [{
-            "cmd": "/weworkippw",
+            "cmd": "/weworkippwlevi",
             "event": EventType.PluginAction,
             "desc": "微信应用检测动态IP",
             "category": "",
             "data": {
-                "action": "weworkippw"
+                "action": "weworkippwlevi"
             }
         }]
 
@@ -627,7 +627,7 @@ class WeWorkIPPW(_PluginBase):
         """
         if self._enabled and self._check_cron:
             return [{
-                "id": "WeWorkIPPW",
+                "id": "WeWorkIPPWLevi",
                 "name": "微信应用自动配置动态公网IP",
                 "trigger": CronTrigger.from_crontab(self._check_cron),
                 "func": self.check,
@@ -828,7 +828,7 @@ class WeWorkIPPW(_PluginBase):
                                         "props": {
                                             "type": "info",
                                             "variant": "tonal",
-                                            "text": "默认关闭自动登录，发送 #登录企业微信 至MP应用则可以唤起一次登录操作。如果需要验证手机，把验证码按照格式 #123456 发送到MP应用。",
+                                            "text": "默认关闭自动登录，发送 #登录企业微信修复版 至MP应用则可以唤起一次登录操作。如果需要验证手机，把验证码按照格式 #123456 发送到MP应用。",
                                         },
                                     },
                                 ],
@@ -954,7 +954,7 @@ class WeWorkIPPW(_PluginBase):
                                         "props": {
                                             "type": "info",
                                             "variant": "tonal",
-                                            "text": "具体介绍和其他问题在项目主页，推荐先看一次：https://github.com/suraxiuxiu/MoviePilot-Plugins",
+                                            "text": "具体介绍和其他问题在项目主页，推荐先看一次：https://github.com/levi882/MoviePilot-Plugins",
                                         },
                                     }
                                 ],
