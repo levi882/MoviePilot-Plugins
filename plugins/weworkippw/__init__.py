@@ -427,7 +427,7 @@ class WeWorkIPPW(_PluginBase):
                     page.goto(self._urls[0])
                     iframe_element = page.frame_locator('iframe[src*="login_qrcode"]')
                     qr_img_element = iframe_element.locator('.qrcode_login_img')
-                    qr_img_element.wait_for(state="visible", timeout=2000)
+                    qr_img_element.wait_for(state="visible", timeout=15000)
                     qr_img_relative_url = qr_img_element.get_attribute('src')
                     base_url = page.url
                     absolute_url = urljoin(base_url, qr_img_relative_url)
