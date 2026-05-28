@@ -1,13 +1,14 @@
 {
     "WeWorkIPPWLevi": {
         "name": "企微配置IPpw修复版",
-        "description": "!!docker用户用这个版本!!定时获取最新动态公网IP，配置到企业微信应用的可信IP列表里。使用playWright运行的版本，适合docker用户使用",
+        "description": "!!docker用户用这个版本!!定时获取最新动态公网IP，稳定配置到企业微信应用的可信IP列表里。使用playWright运行的版本，适合docker用户使用",
         "labels": "消息通知",
-        "version": "2.4.4",
+        "version": "2.4.5",
         "icon": "https://github.com/suraxiuxiu/MoviePilot-Plugins/blob/main/icons/micon.png?raw=true",
         "author": "levi882",
         "level": 2,
         "history": {
+            "v2.4.5": "增强任务互斥、网络超时、登录Cookie校验、可信IP保存校验和配置容错，提升运行稳定性",
             "v2.4.4": "增加立即登录一次开关，可直接唤起企业微信二维码登录",
             "v2.4.3": "延长企业微信二维码加载等待时间，避免页面加载较慢时登录超时",
             "v2.4.2": "修改网络超时判断机制",

@@ -23,11 +23,11 @@ class WeWorkIPPWLevi(_PluginBase):
     # 插件名称
     plugin_name = "企微配置IPpw修复版"
     # 插件描述
-    plugin_desc = "!!docker用户用这个版本!!定时获取最新动态公网IP，配置到企业微信应用的可信IP列表里。"
+    plugin_desc = "!!docker用户用这个版本!!定时获取最新动态公网IP，稳定配置到企业微信应用的可信IP列表里。"
     # 插件图标
     plugin_icon = "https://github.com/suraxiuxiu/MoviePilot-Plugins/blob/main/icons/micon.png?raw=true"
     # 插件版本
-    plugin_version = "2.4.4"
+    plugin_version = "2.4.5"
     # 插件作者
     plugin_author = "levi882"
     # 作者主页
