@@ -27,7 +27,7 @@ class WeWorkIPPWLevi(_PluginBase):
     # 插件图标
     plugin_icon = "https://github.com/suraxiuxiu/MoviePilot-Plugins/blob/main/icons/micon.png?raw=true"
     # 插件版本
-    plugin_version = "2.4.7"
+    plugin_version = "2.4.9"
     # 插件作者
     plugin_author = "levi882"
     # 作者主页
@@ -235,8 +235,13 @@ class WeWorkIPPWLevi(_PluginBase):
             return False
 
     def _has_wework_session_cookie(self, cookies: List[dict]) -> bool:
-        cookie_names = {cookie.get("name") for cookie in cookies}
-        return bool(cookie_names.intersection({"wwrtx.sid", "wwrtx.vst", "wwrtx.refid"}))
+        auth_cookie_names = {"wwrtx.sid", "wwrtx.vst"}
+        for cookie in cookies:
+            name = cookie.get("name")
+            value = cookie.get("value")
+            if name in auth_cookie_names and value and value.lower() != "deleted":
+                return True
+        return False
 
     def _is_transient_browser_error(self, error: Exception) -> bool:
         error_text = str(error)
@@ -299,7 +304,9 @@ class WeWorkIPPWLevi(_PluginBase):
                               userid=event_data.get("user"))
 
         logger.info("开始检测公网IP")
-        if self.CheckIP():
+        should_change_ip = self.CheckIP()
+        self.__update_config()
+        if should_change_ip:
             self.ChangeIP()
             self.__update_config()
 
@@ -311,11 +318,10 @@ class WeWorkIPPWLevi(_PluginBase):
                               userid=event_data.get("user"))
         
     def CheckIP(self):
-        if not self._cookie_valid:
-            logger.error("cookie以过期,跳过IP检测")
-            return False
-        if not self._ip_changed:  # 上次IP变更没有改动到企微 再次请求该IP
+        if not self._ip_changed and self._cookie_valid:  # 上次IP变更没有改动到企微 再次请求该IP
             return True
+        if not self._ip_changed and not self._cookie_valid:
+            logger.error("cookie已过期，继续检测公网IP并保留待写入状态")
         for url in self._ip_urls:
             ip_address = self.get_ip_from_url(url)
             if ip_address != "获取IP失败":
@@ -330,8 +336,13 @@ class WeWorkIPPWLevi(_PluginBase):
             logger.info("检测到IP变化")
             self._current_ip_address = ip_address
             self._ip_changed = False
+            if not self._cookie_valid:
+                logger.info("cookie已过期，已记录新IP，等待cookie恢复后更新企业微信可信IP")
+                return False
             return True
         else:
+            if not self._cookie_valid:
+                logger.error("cookie已过期，跳过企业微信可信IP更新")
             # logger.info("公网IP未变化")
             return False
 
