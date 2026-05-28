@@ -1,47 +1,24 @@
 {
-    "WeWorkIP": {
-        "name": "企微配置IP",
-        "description": "!!docker用户请使用PW版!!定时获取最新动态公网IP，配置到企业微信应用的可信IP列表里。使用selenium运行的版本,适合Windows用户使用",
-        "labels": "消息通知",
-        "version": "2.5",
-        "icon": "https://github.com/suraxiuxiu/MoviePilot-Plugins/blob/main/icons/micon.png?raw=true",
-        "author": "suraxiuxiu",
-        "level": 2,
-        "history": {
-            "v2.5": "添加自动化浏览器选择",
-            "v2.4.4": "优化后台进程管理",
-            "v2.4.3": "添加无头模式切换",
-            "v2.4.2": "修改网络超时判断机制",
-            "v2.4.1": "修改默认通知间隔",
-            "v2.4": "添加支持验证码功能，添加手动登录，更改通知机制",
-            "v2.3": "添加网络检测机制",
-            "v2.2": "修正通知方式,适配2.0",
-            "v2.1": "修正内置登录缓存BUG",
-            "v2.0": "添加内置扫码登录功能",
-            "v1.2": "优化CC同步时机;修正无头模式；尝试适配v2版本",
-            "v1.1": "优化cookie获取方式;支持多个应用地址,用,号分隔应用网址。"
-        },
-        "v2": true
-    },
     "WeWorkIPPWLevi": {
         "name": "企微配置IPpw修复版",
-        "description": "!!docker用户用这个版本!!定时获取最新动态公网IP，配置到企业微信应用的可信IP列表里。使用playWright运行的版本,适合docker用户使用",
+        "description": "!!docker用户用这个版本!!定时获取最新动态公网IP，配置到企业微信应用的可信IP列表里。使用playWright运行的版本，适合docker用户使用",
         "labels": "消息通知",
-        "version": "2.4.3",
+        "version": "2.4.4",
         "icon": "https://github.com/suraxiuxiu/MoviePilot-Plugins/blob/main/icons/micon.png?raw=true",
         "author": "levi882",
         "level": 2,
         "history": {
+            "v2.4.4": "增加立即登录一次开关，可直接唤起企业微信二维码登录",
             "v2.4.3": "延长企业微信二维码加载等待时间，避免页面加载较慢时登录超时",
             "v2.4.2": "修改网络超时判断机制",
             "v2.4.1": "修改默认通知间隔",
             "v2.4": "添加支持验证码功能，添加手动登录，更改通知机制",
             "v2.3": "添加网络检测机制",
-            "v2.2": "修正通知方式,适配2.0",
+            "v2.2": "修正通知方式，适配2.0",
             "v2.1": "修正内置登录缓存BUG",
             "v2.0": "添加内置扫码登录功能",
-            "v1.2": "优化CC同步时机;修正无头模式；尝试适配v2版本",
-            "v1.1": "优化cookie获取方式;支持多个应用地址,用,号分隔应用网址。"
+            "v1.2": "优化CC同步时机；修正无头模式；尝试适配v2版本",
+            "v1.1": "优化cookie获取方式；支持多个应用地址，使用逗号分隔应用网址"
         },
         "v2": true
     }
