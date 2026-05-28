@@ -27,7 +27,7 @@ class WeWorkIPPWLevi(_PluginBase):
     # 插件图标
     plugin_icon = "https://github.com/suraxiuxiu/MoviePilot-Plugins/blob/main/icons/micon.png?raw=true"
     # 插件版本
-    plugin_version = "2.4.6"
+    plugin_version = "2.4.7"
     # 插件作者
     plugin_author = "levi882"
     # 作者主页
@@ -238,6 +238,17 @@ class WeWorkIPPWLevi(_PluginBase):
         cookie_names = {cookie.get("name") for cookie in cookies}
         return bool(cookie_names.intersection({"wwrtx.sid", "wwrtx.vst", "wwrtx.refid"}))
 
+    def _is_transient_browser_error(self, error: Exception) -> bool:
+        error_text = str(error)
+        transient_markers = [
+            "Timeout",
+            "ERR_NETWORK_CHANGED",
+            "ERR_CONNECTION",
+            "ERR_TIMED_OUT",
+            "net::ERR",
+        ]
+        return any(marker in error_text for marker in transient_markers)
+
     def _is_mobile_confirm_page(self, page) -> bool:
         try:
             if "mobile_confirm" in page.url:
@@ -369,6 +380,7 @@ class WeWorkIPPWLevi(_PluginBase):
                 if self._is_login_page(page):
                     logger.info("cookie失效,请重新获取")
                     self._cookie_valid = False
+                    self._cookie_from_CC = ""
                     browser.close()
                     return
                 else:
@@ -447,6 +459,7 @@ class WeWorkIPPWLevi(_PluginBase):
                 if self._is_login_page(page):
                     logger.info("cookie失效,请重新获取")
                     self._cookie_valid = False
+                    self._cookie_from_CC = ""
                     if self._schedule_login:
                         if self._scheduler.get_job("refresh_cookie"):
                             self._scheduler.remove_job("refresh_cookie")
@@ -462,10 +475,10 @@ class WeWorkIPPWLevi(_PluginBase):
             self.__update_config()
         except Exception as e:
                 logger.error(f"cookie校验失败:{e}") 
-                if "Timeout" in str(e):
-                    logger.info("检测可能连接超时,跳过本次刷新") 
+                if self._is_transient_browser_error(e):
+                    logger.info("检测到浏览器或网络临时异常，保留现有cookie状态等待下次刷新")
                 else:
-                    self._cookie_valid = False
+                    logger.info("本次校验异常未确认cookie失效，保留现有cookie状态")
                 self.__update_config()   
     
     def parse_cookie_header(self,cookie_header):
@@ -489,7 +502,14 @@ class WeWorkIPPWLevi(_PluginBase):
     def get_cookie(self):
         cookie_header = ''
         try:
-            if self._cookie_valid:
+            if self._cookie_from_CC:
+                logger.info("使用插件缓存的企微cookie")
+                if isinstance(self._cookie_from_CC, str):
+                    cookie = self.parse_cookie_header(self._cookie_from_CC)
+                    if cookie:
+                        self._cookie_from_CC = cookie
+                        self.__update_config()
+                    return cookie
                 return self._cookie_from_CC
             if self._use_cookiecloud:
                 logger.info("尝试从CookieCloud同步企微cookie ...")
