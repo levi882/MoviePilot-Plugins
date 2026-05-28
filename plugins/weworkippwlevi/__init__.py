@@ -2,6 +2,7 @@ import base64
 import re
 import os
 import time
+import threading
 from urllib.parse import urljoin
 import requests
 from datetime import datetime, timedelta
@@ -87,6 +88,10 @@ class WeWorkIPPWLevi(_PluginBase):
     _login_running = False
     _login_retry_count = 0
     _login_retry_delays = [300, 900, 1800, 3600]
+    _request_timeout = 15
+    _page_timeout = 30000
+    _wait_timeout = 15000
+    _task_lock = threading.RLock()
     # 定时器
     _scheduler: Optional[BackgroundScheduler] = None
 
@@ -119,7 +124,8 @@ class WeWorkIPPWLevi(_PluginBase):
             self._schedule_login = config.get("schedule_login")
             self._cookie_valid = config.get("cookie_valid")
             self._ip_changed = config.get("ip_changed")
-        self._urls = self._wechatUrl.split(',')
+        self._wechatUrl = self._wechatUrl or ""
+        self._urls = self._normalize_urls(self._wechatUrl)
         if self._ip_changed == None:
             self._ip_changed = True
         if self._cookie_valid == None:
@@ -132,10 +138,15 @@ class WeWorkIPPWLevi(_PluginBase):
             self._schedule_login = False
         if self._login_once == None:
             self._login_once = False
-        if self._status_cron == None:
+        if not self._status_cron:
             self._status_cron = "0 * * * *"
-        if self._check_cron == None:
+        if not self._check_cron:
            self._check_cron = "*/11 * * * *"
+        if (self._enabled or self._onlyonce or self._login_once) and not self._urls:
+            logger.error("未配置有效的企业微信应用网址，跳过任务启动")
+            self._enabled = False
+            self._onlyonce = False
+            self._login_once = False
         # 停止现有任务
         self.stop_service()
 
@@ -180,12 +191,15 @@ class WeWorkIPPWLevi(_PluginBase):
                 self.create_refresh_job()
 
             if not self._schedule_login:
-                self._scheduler.add_job(
-                            func=self.send_cookie_status,
-                            trigger=CronTrigger.from_crontab(self._status_cron),
-                        name="cookie失效通知",
-                        id="send_status"
-                    )
+                try:
+                    self._scheduler.add_job(
+                                func=self.send_cookie_status,
+                                trigger=CronTrigger.from_crontab(self._status_cron),
+                            name="cookie失效通知",
+                            id="send_status"
+                        )
+                except Exception as err:
+                    logger.error(f"Cookie失效通知周期配置错误：{err}")
                 if not self._cookie_valid and not login_once_requested:
                     self._scheduler.add_job(
                     func=self.send_cookie_status,
@@ -201,11 +215,47 @@ class WeWorkIPPWLevi(_PluginBase):
         #self.refresh_cookie()
         self.__update_config()
 
+    def _normalize_urls(self, wechat_url: str) -> List[str]:
+        urls = [url.strip() for url in wechat_url.split(',') if url and url.strip()]
+        invalid_urls = [url for url in urls if not url.startswith("http")]
+        if invalid_urls:
+            logger.error(f"企业微信应用网址格式错误，已忽略：{','.join(invalid_urls)}")
+        return [url for url in urls if url.startswith("http")]
+
+    def _has_valid_urls(self) -> bool:
+        if self._urls:
+            return True
+        logger.error("未配置企业微信应用网址")
+        return False
+
+    def _is_login_page(self, page) -> bool:
+        try:
+            return page.locator('.login_stage_title_text').is_visible(timeout=3000)
+        except Exception:
+            return False
+
+    def _has_wework_session_cookie(self, cookies: List[dict]) -> bool:
+        cookie_names = {cookie.get("name") for cookie in cookies}
+        return bool(cookie_names.intersection({"wwrtx.sid", "wwrtx.vst", "wwrtx.refid"}))
+
     @eventmanager.register(EventType.PluginAction)
     def check(self, event: Event = None):
         """
         检测函数
         """
+        if event:
+            event_data = event.event_data
+            if not event_data or event_data.get("action") != "weworkippwlevi":
+                return
+        if not self._task_lock.acquire(blocking=False):
+            logger.info("已有企业微信IP或登录任务正在运行，跳过本次检测")
+            return
+        try:
+            self._check(event)
+        finally:
+            self._task_lock.release()
+
+    def _check(self, event: Event = None):
         if not self._enabled:
             logger.error("插件未开启")
             return
@@ -215,9 +265,9 @@ class WeWorkIPPWLevi(_PluginBase):
             if not event_data or event_data.get("action") != "weworkippwlevi":
                 return
             logger.info("收到命令，开始检测公网IP ...")
-            self.post_message(channel=event.event_data.get("channel"),
+            self.post_message(channel=event_data.get("channel"),
                               title="开始检测公网IP ...",
-                              userid=event.event_data.get("user"))
+                              userid=event_data.get("user"))
 
         logger.info("开始检测公网IP")
         if self.CheckIP():
@@ -226,9 +276,10 @@ class WeWorkIPPWLevi(_PluginBase):
 
         logger.info("检测公网IP完毕")
         if event:
-            self.post_message(channel=event.event_data.get("channel"),
+            event_data = event.event_data or {}
+            self.post_message(channel=event_data.get("channel"),
                               title="检测公网IP完毕",
-                              userid=event.event_data.get("user"))
+                              userid=event_data.get("user"))
         
     def CheckIP(self):
         if not self._cookie_valid:
@@ -258,7 +309,7 @@ class WeWorkIPPWLevi(_PluginBase):
     def get_ip_from_url(self, url):
         try:
             # 发送 GET 请求
-            response = requests.get(url)
+            response = requests.get(url, timeout=self._request_timeout)
 
             # 检查响应状态码是否为 200
             if response.status_code == 200:
@@ -276,6 +327,8 @@ class WeWorkIPPWLevi(_PluginBase):
             
     def ChangeIP(self):
         logger.info("开始请求企业微信管理更改可信IP")
+        if not self._has_valid_urls():
+            return
         if not self.check_connect():
             logger.error("网络连接失败,跳过本次更改IP")
             return
@@ -284,18 +337,18 @@ class WeWorkIPPWLevi(_PluginBase):
                 browser = p.chromium.launch(headless=True)
                 context = browser.new_context()
                 cookie = self.get_cookie()
-                if cookie == '':
+                if not cookie:
                     logger.error('cookie为空,请检查CC配置和插件手动填写项')
                     browser.close()
                     self._cookie_valid = False
                     return
                 context.add_cookies(cookie)
                 page = context.new_page()
-                page.goto(self._urls[0])
+                page.set_default_timeout(self._wait_timeout)
+                page.goto(self._urls[0], wait_until="domcontentloaded", timeout=self._page_timeout)
                 time.sleep(1)
-                login = page.locator('.login_stage_title_text')
                 # 检查登录元素是否可见
-                if login.is_visible():
+                if self._is_login_page(page):
                     logger.info("cookie失效,请重新获取")
                     self._cookie_valid = False
                     browser.close()
@@ -305,19 +358,28 @@ class WeWorkIPPWLevi(_PluginBase):
                     self._cookie_valid = True
                 for index, url in enumerate(self._urls):           
                     logger.info(f"正在更改第{index+1}个应用的可信IP")
-                    page.goto(url)
-                    page.wait_for_selector('div.app_card_operate.js_show_ipConfig_dialog')
+                    page.goto(url, wait_until="domcontentloaded", timeout=self._page_timeout)
+                    page.wait_for_selector('div.app_card_operate.js_show_ipConfig_dialog', timeout=self._wait_timeout)
                     page.locator('div.app_card_operate.js_show_ipConfig_dialog').click()
-                    page.wait_for_selector('textarea.js_ipConfig_textarea')
+                    page.wait_for_selector('textarea.js_ipConfig_textarea', timeout=self._wait_timeout)
                     input_area = page.locator('textarea.js_ipConfig_textarea')
                     confirm = page.locator('.js_ipConfig_confirmBtn')
                     existing_ip = input_area.input_value()
                     if self._overwrite:
-                        input_area.fill(self._current_ip_address)
+                        target_ip = self._current_ip_address
                     else:
-                        input_area.fill(f'{existing_ip};{self._current_ip_address}')
+                        target_ip = f'{existing_ip};{self._current_ip_address}' if existing_ip else self._current_ip_address
+                    input_area.fill(target_ip)
                     confirm.click()
-                    time.sleep(1)
+                    page.wait_for_timeout(1500)
+                    try:
+                        input_visible = input_area.is_visible(timeout=1000)
+                    except Exception:
+                        input_visible = False
+                    if input_visible:
+                        saved_ip = input_area.input_value()
+                        if self._current_ip_address not in saved_ip:
+                            raise ValueError(f"第{index+1}个应用可信IP未保存成功")
                     logger.info(f"更改第{index+1}个应用的可信IP成功")
                 self._ip_changed = True
                 browser.close() 
@@ -325,7 +387,18 @@ class WeWorkIPPWLevi(_PluginBase):
             logger.error(f"更改可信IP失败:{e}")
     
     def refresh_cookie(self,_login=True):
+        if not self._task_lock.acquire(blocking=False):
+            logger.info("已有企业微信IP或登录任务正在运行，跳过本次缓存刷新")
+            return
+        try:
+            return self._refresh_cookie(_login)
+        finally:
+            self._task_lock.release()
+
+    def _refresh_cookie(self,_login=True):
         logger.info("开始刷新企业微信缓存")
+        if not self._has_valid_urls():
+            return
         if not self.check_connect():
             logger.error("网络连接失败,跳过本次缓存保活")
             return
@@ -349,11 +422,11 @@ class WeWorkIPPWLevi(_PluginBase):
                     return
                 context.add_cookies(cookie)
                 page = context.new_page()
-                page.goto(self._urls[0])
+                page.set_default_timeout(self._wait_timeout)
+                page.goto(self._urls[0], wait_until="domcontentloaded", timeout=self._page_timeout)
                 time.sleep(2)
-                login = page.locator('.login_stage_title_text')
             # 检查登录元素是否可见
-                if login.is_visible():
+                if self._is_login_page(page):
                     logger.info("cookie失效,请重新获取")
                     self._cookie_valid = False
                     if self._schedule_login:
@@ -429,10 +502,22 @@ class WeWorkIPPWLevi(_PluginBase):
                 return cookie_header
 
     def login(self):
+        if not self._task_lock.acquire(blocking=False):
+            logger.info("已有企业微信IP或登录任务正在运行，跳过本次登录")
+            return
+        try:
+            return self._login()
+        finally:
+            self._task_lock.release()
+
+    def _login(self):
         if self._login_running:
             logger.info("企业微信登录任务已在运行，跳过重复触发")
             return
         self._login_running = True
+        if not self._has_valid_urls():
+            self._login_running = False
+            return
         logger.info("开始登录企业微信")
         self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "开始登录企业微信",userid=self._qr_send_users)
         logger.info("进行一次缓存检测")
@@ -453,21 +538,24 @@ class WeWorkIPPWLevi(_PluginBase):
                 context = browser.new_context()
                 try:
                     page = context.new_page()
-                    page.goto(self._urls[0])
+                    page.set_default_timeout(self._wait_timeout)
+                    page.goto(self._urls[0], wait_until="domcontentloaded", timeout=self._page_timeout)
                     iframe_element = page.frame_locator('iframe[src*="login_qrcode"]')
                     qr_img_element = iframe_element.locator('.qrcode_login_img')
                     qr_img_element.wait_for(state="visible", timeout=15000)
                     qr_img_relative_url = qr_img_element.get_attribute('src')
+                    if not qr_img_relative_url:
+                        raise ValueError("未获取到登录二维码地址")
                     base_url = page.url
                     absolute_url = urljoin(base_url, qr_img_relative_url)
                     self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "点击扫描二维码登录企业微信",image=absolute_url,link=absolute_url,userid=self._qr_send_users)
-                    response = requests.get(absolute_url)
+                    response = requests.get(absolute_url, timeout=self._request_timeout)
                     if response.status_code == 200:
                         with open(self.qr_path, "wb") as file:
                             file.write(response.content)
                         logger.info("打开插件详情扫描二维码登录企业微信")
                     else:
-                        logger.info("无法下载二维码图片：", response.status_code)
+                        logger.info(f"无法下载二维码图片：{response.status_code}")
                     try:
                         new_url = False
                         def on_new_url(frame):
@@ -504,9 +592,19 @@ class WeWorkIPPWLevi(_PluginBase):
                                 if 'mobile_confirm' in page.url:
                                     self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "登录失败,请检查验证码并重新发送",userid=self._qr_send_users)
                                     logger.info("登录失败,请检查验证码并重新发送")
-                        cookies = context.cookies()
+                        cookies = []
+                        for _ in range(10):
+                            cookies = context.cookies()
+                            if self._has_wework_session_cookie(cookies):
+                                break
+                            page.wait_for_timeout(1000)
+                        if not self._has_wework_session_cookie(cookies):
+                            raise ValueError("未检测到有效企业微信登录Cookie")
                         cookies2 = ';'.join([f"{cookie['name']}={cookie['value']}" for cookie in cookies])
-                        self._cookie_from_CC = self.parse_cookie_header(cookies2)
+                        parsed_cookie = self.parse_cookie_header(cookies2)
+                        if not parsed_cookie:
+                            raise ValueError("企业微信登录Cookie解析失败")
+                        self._cookie_from_CC = parsed_cookie
                         self._cookie_valid = True
                         self._login_retry_count = 0
                         self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "登录企业微信成功",userid=self._qr_send_users)
@@ -539,7 +637,10 @@ class WeWorkIPPWLevi(_PluginBase):
                     func=self.refresh_cookie,
                     trigger=CronTrigger.from_crontab(self._refresh_cron),
                     name="延续企业微信cookie有效时间",
-                    id="refresh_cookie"
+                    id="refresh_cookie",
+                    replace_existing=True,
+                    max_instances=1,
+                    misfire_grace_time=60
                 )
         except Exception as err:
                 logger.error(f"定时刷新企业微信缓存任务配置错误：{err}")
@@ -577,6 +678,8 @@ class WeWorkIPPWLevi(_PluginBase):
             self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "登录失败",text = "如需再次登录，请回复\n#登录企业微信修复版",userid=self._qr_send_users)
             
     def check_connect(self):
+        if not self._has_valid_urls():
+            return False
         try:
             response = requests.get(self._urls[0], timeout=10)
             if response.status_code == 200:
@@ -615,7 +718,8 @@ class WeWorkIPPWLevi(_PluginBase):
     def receive_message(self, event: Event):
         if not self._enabled:
             return
-        text = event.event_data.get("text")
+        event_data = event.event_data or {}
+        text = event_data.get("text") or ""
         if re.match(self._pattern, text):
             self._code = text[1:]
             logger.info(f"从MP应用收到验证码：{self._code}")
@@ -662,13 +766,16 @@ class WeWorkIPPWLevi(_PluginBase):
         }]
         """
         if self._enabled and self._check_cron:
-            return [{
-                "id": "WeWorkIPPWLevi",
-                "name": "微信应用自动配置动态公网IP",
-                "trigger": CronTrigger.from_crontab(self._check_cron),
-                "func": self.check,
-                "kwargs": {}
-            }]
+            try:
+                return [{
+                    "id": "WeWorkIPPWLevi",
+                    "name": "微信应用自动配置动态公网IP",
+                    "trigger": CronTrigger.from_crontab(self._check_cron),
+                    "func": self.check,
+                    "kwargs": {}
+                }]
+            except Exception as err:
+                logger.error(f"检测IP周期配置错误：{err}")
         return []
             
     def get_api(self) -> List[Dict[str, Any]]:
@@ -1014,7 +1121,7 @@ class WeWorkIPPWLevi(_PluginBase):
             }
         ], {
             "enabled": False,
-            "cron": "",
+            "cron": "*/11 * * * *",
             "overwrite": False,
             "use_cookiecloud": True,
             "onlyonce": False,
