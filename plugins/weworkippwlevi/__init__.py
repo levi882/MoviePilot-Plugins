@@ -27,7 +27,7 @@ class WeWorkIPPWLevi(_PluginBase):
     # 插件图标
     plugin_icon = "https://github.com/suraxiuxiu/MoviePilot-Plugins/blob/main/icons/micon.png?raw=true"
     # 插件版本
-    plugin_version = "2.4.9"
+    plugin_version = "2.4.10"
     # 插件作者
     plugin_author = "levi882"
     # 作者主页
@@ -109,21 +109,21 @@ class WeWorkIPPWLevi(_PluginBase):
         self._login_running = False
         self._login_retry_count = 0
         if config:
-            self._enabled = config.get("enabled")
+            self._enabled = self._to_bool(config.get("enabled"), False)
             self._check_cron = config.get("cron")
             self._status_cron = config.get("status_cron")
-            self._onlyonce = config.get("onlyonce")
-            self._login_once = config.get("login_once")
+            self._onlyonce = self._to_bool(config.get("onlyonce"), False)
+            self._login_once = self._to_bool(config.get("login_once"), False)
             self._wechatUrl = config.get("wechatUrl")
             self._cookie_header = config.get("cookie_header")
             self._qr_send_users = config.get("qr_send_users")
             self._cookie_from_CC = config.get("cookie_from_CC")
-            self._overwrite = config.get("overwrite")
+            self._overwrite = self._to_bool(config.get("overwrite"), True)
             self._current_ip_address = config.get("current_ip_address")
-            self._use_cookiecloud = config.get("use_cookiecloud")
-            self._schedule_login = config.get("schedule_login")
-            self._cookie_valid = config.get("cookie_valid")
-            self._ip_changed = config.get("ip_changed")
+            self._use_cookiecloud = self._to_bool(config.get("use_cookiecloud"), True)
+            self._schedule_login = self._to_bool(config.get("schedule_login"), False)
+            self._cookie_valid = self._to_bool(config.get("cookie_valid"), False)
+            self._ip_changed = self._to_bool(config.get("ip_changed"), True)
         self._wechatUrl = self._wechatUrl or ""
         self._urls = self._normalize_urls(self._wechatUrl)
         if self._ip_changed == None:
@@ -214,6 +214,22 @@ class WeWorkIPPWLevi(_PluginBase):
                 self._scheduler.start()
         #self.refresh_cookie()
         self.__update_config()
+
+    @staticmethod
+    def _to_bool(value: Any, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in ("true", "1", "yes", "on", "y", "是", "开", "开启"):
+                return True
+            if normalized in ("false", "0", "no", "off", "n", "否", "关", "关闭", ""):
+                return False
+        return bool(value)
 
     def _normalize_urls(self, wechat_url: str) -> List[str]:
         urls = [url.strip() for url in wechat_url.split(',') if url and url.strip()]
