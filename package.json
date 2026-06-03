@@ -3,11 +3,12 @@
         "name": "企微配置IPpw修复版",
         "description": "!!docker用户用这个版本!!定时获取最新动态公网IP，稳定配置到企业微信应用的可信IP列表里。使用playWright运行的版本，适合docker用户使用",
         "labels": "消息通知",
-        "version": "2.4.10",
+        "version": "2.4.11",
         "icon": "https://github.com/suraxiuxiu/MoviePilot-Plugins/blob/main/icons/micon.png?raw=true",
         "author": "levi882",
         "level": 2,
         "history": {
+            "v2.4.11": "增加自动登录防刷屏保护，连续失败后退避重试并自动暂停，避免二维码和失败通知轰炸消息中心",
             "v2.4.10": "修复自动登录关闭后仍可能被配置字符串误判为开启，导致登录失败后持续重试的问题",
             "v2.4.9": "Cookie失效时仍记录公网IP变化，待Cookie恢复后自动补写企业微信可信IP",
             "v2.4.8": "收紧企业微信登录态Cookie判定，避免二维码页辅助Cookie被误判为登录成功",

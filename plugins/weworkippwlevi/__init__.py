@@ -27,7 +27,7 @@ class WeWorkIPPWLevi(_PluginBase):
     # 插件图标
     plugin_icon = "https://github.com/suraxiuxiu/MoviePilot-Plugins/blob/main/icons/micon.png?raw=true"
     # 插件版本
-    plugin_version = "2.4.10"
+    plugin_version = "2.4.11"
     # 插件作者
     plugin_author = "levi882"
     # 作者主页
@@ -88,6 +88,8 @@ class WeWorkIPPWLevi(_PluginBase):
     _login_running = False
     _login_retry_count = 0
     _login_retry_delays = [300, 900, 1800, 3600]
+    _login_retry_limit = 4
+    _login_not_before = 0
     _request_timeout = 15
     _page_timeout = 30000
     _wait_timeout = 15000
@@ -108,6 +110,7 @@ class WeWorkIPPWLevi(_PluginBase):
         self._urls = []
         self._login_running = False
         self._login_retry_count = 0
+        self._login_not_before = 0
         if config:
             self._enabled = self._to_bool(config.get("enabled"), False)
             self._check_cron = config.get("cron")
@@ -124,6 +127,8 @@ class WeWorkIPPWLevi(_PluginBase):
             self._schedule_login = self._to_bool(config.get("schedule_login"), False)
             self._cookie_valid = self._to_bool(config.get("cookie_valid"), False)
             self._ip_changed = self._to_bool(config.get("ip_changed"), True)
+            self._login_retry_count = self._to_int(config.get("login_retry_count"), 0)
+            self._login_not_before = self._to_int(config.get("login_not_before"), 0)
         self._wechatUrl = self._wechatUrl or ""
         self._urls = self._normalize_urls(self._wechatUrl)
         if self._ip_changed == None:
@@ -138,6 +143,9 @@ class WeWorkIPPWLevi(_PluginBase):
             self._schedule_login = False
         if self._login_once == None:
             self._login_once = False
+        if not self._schedule_login:
+            self._login_retry_count = 0
+            self._login_not_before = 0
         if not self._status_cron:
             self._status_cron = "0 * * * *"
         if not self._check_cron:
@@ -169,12 +177,15 @@ class WeWorkIPPWLevi(_PluginBase):
 
             if login_once_requested:
                 logger.info("立即登录企业微信")
+                self._login_retry_count = 0
+                self._login_not_before = 0
                 self._scheduler.add_job(
                     func=self.login,
                     trigger="date",
                     run_date=datetime.now(tz=pytz.timezone(settings.TZ))
                     + timedelta(seconds=3),
                     name="登录企业微信",
+                    kwargs={"force": True},
                 )
                 self._login_once = False
 
@@ -230,6 +241,15 @@ class WeWorkIPPWLevi(_PluginBase):
             if normalized in ("false", "0", "no", "off", "n", "否", "关", "关闭", ""):
                 return False
         return bool(value)
+
+    @staticmethod
+    def _to_int(value: Any, default: int = 0) -> int:
+        if value is None:
+            return default
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
 
     def _normalize_urls(self, wechat_url: str) -> List[str]:
         urls = [url.strip() for url in wechat_url.split(',') if url and url.strip()]
@@ -566,18 +586,24 @@ class WeWorkIPPWLevi(_PluginBase):
                 logger.error(f"获取cookie失败:{e}") 
                 return cookie_header
 
-    def login(self):
+    def login(self, force: bool = False):
         if not self._task_lock.acquire(blocking=False):
             logger.info("已有企业微信IP或登录任务正在运行，跳过本次登录")
             return
         try:
-            return self._login()
+            return self._login(force=force)
         finally:
             self._task_lock.release()
 
-    def _login(self):
+    def _login(self, force: bool = False):
         if self._login_running:
             logger.info("企业微信登录任务已在运行，跳过重复触发")
+            return
+        now_ts = int(time.time())
+        if not force and self._schedule_login and self._login_not_before > now_ts:
+            wait_seconds = self._login_not_before - now_ts
+            logger.info(f"自动登录冷却中，{wait_seconds} 秒后再试")
+            self.create_login_job(delay_seconds=wait_seconds)
             return
         self._login_running = True
         if not self._has_valid_urls():
@@ -590,6 +616,7 @@ class WeWorkIPPWLevi(_PluginBase):
         if self._cookie_valid:
             logger.info("已使用其他有效缓存,跳过登录")
             self._login_retry_count = 0
+            self._login_not_before = 0
             if not self._scheduler.get_job("refresh_cookie"):
                 self.create_refresh_job()
             if self._scheduler.get_job(self._login_job_id):
@@ -649,6 +676,7 @@ class WeWorkIPPWLevi(_PluginBase):
                         self._cookie_from_CC = parsed_cookie
                         self._cookie_valid = True
                         self._login_retry_count = 0
+                        self._login_not_before = 0
                         self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "登录企业微信成功",userid=self._qr_send_users)
                         logger.info("登录企业微信成功")
                         if not self._scheduler.get_job("refresh_cookie"):
@@ -688,7 +716,7 @@ class WeWorkIPPWLevi(_PluginBase):
                 logger.error(f"定时刷新企业微信缓存任务配置错误：{err}")
                 self.systemmessage.put(f"定时刷新企业微信缓存任务配置错误：{err}")
         
-    def create_login_job(self, delay_seconds: int = 300):
+    def create_login_job(self, delay_seconds: int = 300, force: bool = False):
         logger.info("唤起企业微信登录任务")
         try:
                 self._scheduler.add_job(
@@ -698,6 +726,7 @@ class WeWorkIPPWLevi(_PluginBase):
                     + timedelta(seconds=delay_seconds),
                     name="唤起企业微信登录",
                     id=self._login_job_id,
+                    kwargs={"force": force},
                     replace_existing=True,
                     max_instances=1,
                     misfire_grace_time=60
@@ -709,13 +738,24 @@ class WeWorkIPPWLevi(_PluginBase):
     def login_fail(self):
         self._cookie_valid = False
         if self._schedule_login:
+            if self._login_retry_count >= self._login_retry_limit:
+                self._schedule_login = False
+                self._login_retry_count = 0
+                self._login_not_before = 0
+                if self._scheduler and self._scheduler.get_job(self._login_job_id):
+                    self._scheduler.remove_job(self._login_job_id)
+                self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "登录失败",text = "自动登录连续失败次数过多，已自动暂停。请确认网络和企业微信登录状态后，手动回复\n#登录企业微信修复版",userid=self._qr_send_users)
+                self.__update_config()
+                return
             delay_seconds = self._login_retry_delays[
                 min(self._login_retry_count, len(self._login_retry_delays) - 1)
             ]
             self._login_retry_count += 1
+            self._login_not_before = int(time.time()) + delay_seconds
             retry_minutes = max(1, delay_seconds // 60)
             self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "登录失败",text = f"已开启自动登录，将在 {retry_minutes} 分钟后开始下一轮登录。",userid=self._qr_send_users)
             self.create_login_job(delay_seconds=delay_seconds)
+            self.__update_config()
         else:
             self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "登录失败",text = "如需再次登录，请回复\n#登录企业微信修复版",userid=self._qr_send_users)
             
@@ -752,6 +792,8 @@ class WeWorkIPPWLevi(_PluginBase):
                 "cookie_valid": self._cookie_valid,
                 "ip_changed": self._ip_changed,
                 "schedule_login": self._schedule_login,
+                "login_retry_count": self._login_retry_count,
+                "login_not_before": self._login_not_before,
                 "status_cron":self._status_cron
             }
         )
@@ -771,7 +813,8 @@ class WeWorkIPPWLevi(_PluginBase):
                 self.post_message(channel=MessageChannel.Wechat,mtype=NotificationType.Plugin,title = "缓存有效，无需登录",userid=self._qr_send_users)
                 return
             self._login_retry_count = 0
-            self.create_login_job(delay_seconds=3)
+            self._login_not_before = 0
+            self.create_login_job(delay_seconds=3, force=True)
     
     def send_cookie_status(self):
         if not self._cookie_valid:
