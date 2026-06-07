@@ -27,7 +27,7 @@ class WeWorkIPPWLevi(_PluginBase):
     # 插件图标
     plugin_icon = "https://github.com/suraxiuxiu/MoviePilot-Plugins/blob/main/icons/micon.png?raw=true"
     # 插件版本
-    plugin_version = "2.4.11"
+    plugin_version = "2.4.12"
     # 插件作者
     plugin_author = "levi882"
     # 作者主页
@@ -99,6 +99,12 @@ class WeWorkIPPWLevi(_PluginBase):
 
     def init_plugin(self, config: dict = None):
         # 清空配置
+        self._enabled = False
+        self._onlyonce = False
+        self._login_once = False
+        self._schedule_login = False
+        self._check_cron = "*/11 * * * *"
+        self._status_cron = "0 * * * *"
         self._wechatUrl = ''
         self._cookie_header = ""
         self._qr_send_users = ""
@@ -599,6 +605,9 @@ class WeWorkIPPWLevi(_PluginBase):
         if self._login_running:
             logger.info("企业微信登录任务已在运行，跳过重复触发")
             return
+        if not force and not self._schedule_login:
+            logger.info("自动登录未开启，跳过自动登录任务")
+            return
         now_ts = int(time.time())
         if not force and self._schedule_login and self._login_not_before > now_ts:
             wait_seconds = self._login_not_before - now_ts
@@ -717,6 +726,9 @@ class WeWorkIPPWLevi(_PluginBase):
                 self.systemmessage.put(f"定时刷新企业微信缓存任务配置错误：{err}")
         
     def create_login_job(self, delay_seconds: int = 300, force: bool = False):
+        if not force and not self._schedule_login:
+            logger.info("自动登录未开启，跳过登录任务创建")
+            return
         logger.info("唤起企业微信登录任务")
         try:
                 self._scheduler.add_job(
