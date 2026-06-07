@@ -27,7 +27,7 @@ class WeWorkIPPWLevi(_PluginBase):
     # 插件图标
     plugin_icon = "https://github.com/suraxiuxiu/MoviePilot-Plugins/blob/main/icons/micon.png?raw=true"
     # 插件版本
-    plugin_version = "2.4.12"
+    plugin_version = "2.4.13"
     # 插件作者
     plugin_author = "levi882"
     # 作者主页
@@ -168,6 +168,10 @@ class WeWorkIPPWLevi(_PluginBase):
             # 定时服务
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
             login_once_requested = self._login_once
+            if login_once_requested:
+                logger.info("检测到立即登录一次开关，为避免重启后残留触发刷屏，已自动关闭。请使用 #登录企业微信修复版 手动唤起登录。")
+                self._login_once = False
+                login_once_requested = False
             # 运行一次定时服务
             if self._onlyonce:
                 logger.info("立即检测公网IP")
@@ -180,20 +184,6 @@ class WeWorkIPPWLevi(_PluginBase):
                 )
                 # 关闭一次性开关
                 self._onlyonce = False
-
-            if login_once_requested:
-                logger.info("立即登录企业微信")
-                self._login_retry_count = 0
-                self._login_not_before = 0
-                self._scheduler.add_job(
-                    func=self.login,
-                    trigger="date",
-                    run_date=datetime.now(tz=pytz.timezone(settings.TZ))
-                    + timedelta(seconds=3),
-                    name="登录企业微信",
-                    kwargs={"force": True},
-                )
-                self._login_once = False
 
             if not self._cookie_valid:
                 if not login_once_requested:
@@ -910,7 +900,8 @@ class WeWorkIPPWLevi(_PluginBase):
                                         "component": "VSwitch",
                                         "props": {
                                             "model": "login_once",
-                                            "label": "立即登录一次",
+                                            "label": "立即登录一次(请用命令)",
+                                            "disabled": True,
                                         },
                                     }
                                 ],
@@ -1379,12 +1370,11 @@ class WeWorkIPPWLevi(_PluginBase):
         退出插件
         """
         try:
-            if self._driver:
-                self._driver.close()
+            self._driver = None
             if self._scheduler:
+                self._scheduler.remove_all_jobs()
                 if self._scheduler.running:
-                    self._scheduler.shutdown()
-                    self._scheduler.remove_all_jobs()
+                    self._scheduler.shutdown(wait=False)
                 self._scheduler = None
         except Exception as e:
             logger.error("退出插件失败：%s" % str(e))
