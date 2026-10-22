@@ -1,0 +1,25 @@
+name: mp-fel-worker
+services:
+  worker:
+    build: .
+    image: mp-fel-worker:0.3.2
+    command: ["--config", "/queue/worker-runtime.json"]
+    init: true
+    restart: unless-stopped
+    user: "${WORKER_UID:-1000}:${WORKER_GID:-1000}"
+    group_add: ["${RENDER_GID:?set the host render device group}"]
+    cpus: 3.0
+    mem_limit: 4g
+    pids_limit: 128
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    devices: [/dev/dri/renderD128:/dev/dri/renderD128]
+    volumes:
+      - ${MP_FEL_QUEUE:?set the plugin queue folder}:/queue:rw
+      - ${MOVIE_SOURCE:?set the organized movie folder}:/sources/movies:ro
+    tmpfs: ["/tmp:size=134217728,mode=1777"]
+    environment:
+      HOME: /tmp
+      LIBVA_DRIVER_NAME: iHD

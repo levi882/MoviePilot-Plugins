@@ -1,0 +1,14 @@
+{
+  "queue": "/queue",
+  "scratch": "/queue/work",
+  "encoder": "qsv",
+  "non_fel": "skip",
+  "reserve_gib": 10,
+  "max_hours": 168,
+  "roots": {
+    "movies": {
+      "source": "/sources/movies",
+      "output": "/queue/staging/movies"
+    }
+  }
+}

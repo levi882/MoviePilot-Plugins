@@ -1,0 +1,20 @@
+{
+  "FelPlayback": {
+    "name": "FEL 自动重建",
+    "description": "实验性 P7 FEL 重建，沿用原电影库；需要独立处理服务。",
+    "version": "0.3.2",
+    "icon": "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/Moviepilot_A.png",
+    "author": "levi882",
+    "level": 1,
+    "system_version": ">=3.1.8,<4",
+    "history": {
+      "v0.3.2": "精简配置界面：常用设置集中显示，目录详情、手动处理与清理维护折叠收纳。",
+      "v0.3.1": "新增可恢复的历史清理和日志压缩归档，保留任务状态、发布回执、原片及成品。",
+      "v0.3.0": "直接读取 MP 目录规则，移除手填映射及 KodiPlayback 处理依赖。",
+      "v0.2.0": "沿用原电影库，下载目录保存重建成品；普通影片沿用 MP 流程。",
+      "v0.1.0": "本地实验首版，默认仅检测。"
+    },
+    "labels": "杜比视界,FEL,实验性",
+    "release": false
+  }
+}

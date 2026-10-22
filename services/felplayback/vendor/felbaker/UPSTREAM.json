@@ -1,0 +1,5 @@
+{
+  "repository": "https://github.com/bbeny123/felbaker",
+  "commit": "cae66302433578ec62afa8c5c5809e93d0405b2f",
+  "modification": "VapourSynthEntry.cpp: Bake/ToRGB return schema aligned to clip key; image processing unchanged"
+}
